@@ -10,8 +10,8 @@ parser.add_argument('ply_folder', help='folder containing colored pointcloud obj
 parser.add_argument('--output', '-o', help='path to output folder', required=True)
 parser.add_argument('--radius', '-r', type=float, default=10, help='radius of circular camera path in meters')
 parser.add_argument('--distance', '-d', type=float, default=-100, help='camera z distance from origin')
-parser.add_argument('--fps', type=int, default=5, help='frames per second')
-parser.add_argument('--period', type=int, default=1, help='duration in seconds for a full rotation')
+parser.add_argument('--fps', type=int, default=10, help='frames per second')
+parser.add_argument('--period', type=int, default=4, help='duration in seconds for a full rotation')
 parser.add_argument('--resolution', nargs=2, default=[640,512], type=int, help='output image resolution')
 parser.add_argument('--psf', type=float, default=1, help='pointcloud scale factor')
 parser.add_argument('--endoscope', help='path to endoscope CAD model')
@@ -41,13 +41,16 @@ if __name__ == '__main__':
     plotter.show_axes()
     render_camera_axis(plotter, 0.015)
 
+    current_angle = 0  # Track the current rotation angle
+    frames_per_ply = 2  # Number of frames to generate per PLY file
+
     for idx, ply_file in enumerate(ply_files):
         ply_path = os.path.join(args.ply_folder, ply_file)
         print(f"Processing {ply_path} ...")
 
         pt_cloud = pv.read(ply_path)
         pt_cloud.points *= args.psf
-        plotter.clear()  # 清空之前的点云
+        plotter.clear()
         plotter.add_mesh(pt_cloud, point_size=2, rgb=True)
 
         if args.endoscope is not None:
@@ -59,9 +62,8 @@ if __name__ == '__main__':
 
         focus = pt_cloud.center
 
-        total_frames = args.fps * args.period
-        for f in tqdm(range(total_frames), total=total_frames, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}'):
-            angle = f * 2 * np.pi / total_frames
+        for f in range(frames_per_ply):
+            angle = current_angle + f * (2 * np.pi / (args.fps * args.period))
             x = args.radius * np.cos(angle)
             y = -args.radius * np.sin(angle)
             plotter.camera.SetPosition(x, y, args.distance)
@@ -70,9 +72,11 @@ if __name__ == '__main__':
             plotter.reset_camera_clipping_range()
 
             plotter.show(interactive_update=(args.display), auto_close=False)
-            # 保存单帧图片
             save_path = os.path.join(args.output, f"{idx:04d}_{f:04d}.png")
             plotter.screenshot(save_path)
+        
+        # Update the current angle for the next PLY file
+        current_angle += frames_per_ply * (2 * np.pi / (args.fps * args.period))
 
     plotter.close()
     print("All frames saved.")
